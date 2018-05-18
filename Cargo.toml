@@ -1,0 +1,15 @@
+[package]
+name = "tvm"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "TVM Rust runtime"
+repository = "https://github.com/dmlc/tvm-rs"
+readme = "README.md"
+keywords = ["tvm", "nnvm"]
+categories = ["api-bindings", "science"]
+authors = ["Nick Hynes <nhynes@berkeley.edu>"]
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.37"
