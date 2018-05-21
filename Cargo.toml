@@ -10,6 +10,9 @@ categories = ["api-bindings", "science"]
 authors = ["Nick Hynes <nhynes@berkeley.edu>"]
 
 [dependencies]
+error-chain = { version = "0.11.0", default-features = false }
+lazy_static = "1.0.0"
+ndarray = "0.11.2"
 
 [build-dependencies]
 bindgen = "0.37"
