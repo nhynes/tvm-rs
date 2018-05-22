@@ -1,11 +1,16 @@
 #![feature(box_syntax)]
 #![feature(try_from)]
+#![feature(vec_resize_default)]
+#![feature(conservative_impl_trait)]
 
+extern crate bounded_spsc_queue;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate lazy_static;
 extern crate ndarray;
+#[cfg(not(target_env = "sgx"))]
+extern crate num_cpus;
 
 pub mod ffi {
   #![allow(non_camel_case_types)]

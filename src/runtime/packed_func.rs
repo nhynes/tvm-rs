@@ -7,6 +7,9 @@ use ffi::runtime::{
 
 use errors::*;
 
+pub type PackedFunc = Box<FnOnce(&[TVMArgValue]) -> TVMRetValue + Send>;
+
+#[macro_export]
 macro_rules! call_packed {
   ($fn:expr, $($args:expr),+) => {
     $fn(&[$($args.into(),)+])
@@ -157,9 +160,8 @@ impl_prim_ret_value!(f64, 8);
 impl_prim_ret_value!(i8, 3);
 impl_boxed_ret_value!(String, 11);
 
-type PackedFunc = Box<Fn(&[TVMArgValue]) -> TVMRetValue>;
-pub fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedFunc {
-  Box::new(move |args: &[TVMArgValue]| {
+pub(in runtime) fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedFunc {
+  box move |args: &[TVMArgValue]| {
     func(
       args
         .iter()
@@ -174,5 +176,5 @@ pub fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedFunc {
       args.len() as i32,
     );
     TVMRetValue::default()
-  })
+  }
 }

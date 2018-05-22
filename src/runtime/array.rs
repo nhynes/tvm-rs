@@ -1,8 +1,9 @@
-use ndarray;
 use std::{
   mem,
   os::raw::{c_int, c_void},
 };
+
+use ndarray;
 
 use ffi::runtime::{
   DLContext, DLDataType, DLDataTypeCode_kDLFloat, DLDataTypeCode_kDLInt, DLDataTypeCode_kDLUInt,

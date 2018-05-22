@@ -18,6 +18,7 @@ fn main() {
       env!("CARGO_MANIFEST_DIR"),
       "/tvm/dlpack/include"
     ))
+    .layout_tests(false)
     .generate()
     .expect("Unable to generate bindings.");
 
