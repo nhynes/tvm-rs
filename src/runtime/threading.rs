@@ -273,6 +273,9 @@ mod tests {
     let num_tasks = 3;
     TVMBackendParallelLaunch(flambda, &cdata as *const _ as *const c_void, num_tasks);
     assert_eq!(cdata.0.load(Ordering::SeqCst), num_tasks);
-    assert_eq!(cdata.1.load(Ordering::SeqCst), (0..num_tasks).sum());
+    assert_eq!(
+      cdata.1.load(Ordering::SeqCst),
+      (0..num_tasks).sum::<usize>()
+    );
   }
 }

@@ -8,6 +8,10 @@ extern crate lazy_static;
 extern crate ndarray;
 #[cfg(not(target_env = "sgx"))]
 extern crate num_cpus;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
 pub mod ffi {
   #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals, unused)]
