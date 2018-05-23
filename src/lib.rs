@@ -1,7 +1,4 @@
-#![feature(box_syntax)]
-#![feature(try_from)]
-#![feature(vec_resize_default)]
-#![feature(conservative_impl_trait)]
+#![feature(box_syntax, fn_traits, try_from, unboxed_closures)]
 
 extern crate bounded_spsc_queue;
 #[macro_use]
@@ -13,10 +10,7 @@ extern crate ndarray;
 extern crate num_cpus;
 
 pub mod ffi {
-  #![allow(non_camel_case_types)]
-  #![allow(non_snake_case)]
-  #![allow(non_upper_case_globals)]
-  #![allow(unused)]
+  #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals, unused)]
 
   pub mod runtime {
     use std::os::raw::{c_char, c_int, c_void};
