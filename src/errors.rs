@@ -1,4 +1,4 @@
-use std::string::String;
+use serde_json;
 
 error_chain! {
   errors {
@@ -6,5 +6,8 @@ error_chain! {
       description("mismatched types while downcasting TVMRetValue")
       display("invalid downcast: expected `{}` but was `{}`", expected, actual)
     }
+  }
+  foreign_links {
+    GraphDeserialize(serde_json::Error);
   }
 }

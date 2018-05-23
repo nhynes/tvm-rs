@@ -1,4 +1,4 @@
-#![feature(fs_read_write)]
+#![feature(fs_read_write, try_from)]
 
 extern crate serde;
 #[macro_use]
@@ -6,11 +6,11 @@ extern crate serde_json;
 
 extern crate tvm;
 
-use std::fs;
+use std::{convert::TryFrom, fs};
 
 #[test]
 fn test_resnet_inference() {
-  let graph: tvm::runtime::Graph = serde_json::from_str(&fs::read_string(concat!(
+  let graph = tvm::runtime::Graph::try_from(&fs::read_string(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/resnet_inference.json"
   )).unwrap())
@@ -29,7 +29,7 @@ fn test_resnet_inference() {
   );
   assert_eq!(graph.nodes[5].inputs[3].version, 1);
   assert_eq!(
-    json!(graph.attrs.as_ref().unwrap().get("shape").unwrap())[1][0][3],
+    graph.attrs.as_ref().unwrap().get("shape").unwrap()[1][0][3],
     224
   );
 }

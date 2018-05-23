@@ -1,6 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryFrom};
 
 use serde_json;
+
+use errors::{Error, Result};
+
+const NDARRAY_MAGIC: u64 = 0xDD5E40F096B4A13F; // Magic number for NDArray file
+const NDARRAY_LIST_MAGIC: u64 = 0xF7E58D4F05049CB7; // Magic number for NDArray list file
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Graph {
@@ -25,4 +30,12 @@ pub struct Node {
   pub inputs: Vec<Entry>,
   pub attrs: Option<HashMap<String, String>>,
   pub control_deps: Option<Vec<Entry>>,
+}
+
+impl<'a> TryFrom<&'a String> for Graph {
+  type Error = Error;
+  fn try_from(graph_json: &String) -> Result<Self> {
+    let graph = serde_json::from_str(graph_json.borrow())?;
+    Ok(graph)
+  }
 }
