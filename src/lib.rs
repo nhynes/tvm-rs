@@ -6,6 +6,8 @@ extern crate error_chain;
 #[macro_use]
 extern crate lazy_static;
 extern crate ndarray;
+#[macro_use]
+extern crate nom;
 #[cfg(not(target_env = "sgx"))]
 extern crate num_cpus;
 extern crate serde;

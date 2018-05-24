@@ -10,6 +10,25 @@ use ffi::runtime::{
   DLTensor,
 };
 
+#[derive(Debug)]
+pub struct TVMContext {
+  pub device_type: u32,
+  pub device_id: i32,
+}
+
+#[derive(Debug)]
+pub struct Tensor {
+  pub data: Vec<u8>,
+  pub ctx: TVMContext,
+  pub ndim: usize,
+  pub dtype: DLDataType,
+  pub shape: Vec<i64>,
+  pub strides: Option<Vec<i64>>,
+  pub byte_offset: u64,
+}
+
+pub type DataType = DLDataType;
+
 macro_rules! impl_from_array {
   ($type:ty, $typecode:expr) => {
     impl<'a, D: ndarray::Dimension> From<&'a mut ndarray::Array<$type, D>> for DLTensor {
