@@ -1,10 +1,12 @@
-use std::{collections::HashMap, ffi::CStr, os::raw::c_char, string::String, sync::Mutex};
+use std::{
+  borrow::Borrow, collections::HashMap, ffi::CStr, os::raw::c_char, string::String, sync::Mutex,
+};
 
 use ffi::runtime::BackendPackedCFunc;
 use runtime::packed_func::{wrap_backend_packed_func, PackedFunc};
 
 pub trait Module {
-  fn get_function<S: AsRef<String>>(&self, name: S) -> Option<PackedFunc>;
+  fn get_function<S: Borrow<String>>(&self, name: S) -> Option<PackedFunc>;
 }
 
 pub struct SystemLibModule {}
@@ -15,11 +17,11 @@ lazy_static! {
 }
 
 impl Module for SystemLibModule {
-  fn get_function<S: AsRef<String>>(&self, name: S) -> Option<PackedFunc> {
+  fn get_function<S: Borrow<String>>(&self, name: S) -> Option<PackedFunc> {
     SYSTEM_LIB_FUNCTIONS
       .lock()
       .unwrap()
-      .get(name.as_ref())
+      .get(name.borrow())
       .map(|func| wrap_backend_packed_func(func.to_owned()))
   }
 }

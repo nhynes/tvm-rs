@@ -115,7 +115,7 @@ impl<'a> Threads {
 
   #[cfg(target_env = "sgx")]
   fn launch<F: Sync + Send + FnOnce(Consumer<Task>) + 'static + Copy>(num: usize, _cb: F) -> Self {
-    let consumer_queues = SGX_QUEUES.lock().unwrap();
+    let mut consumer_queues = SGX_QUEUES.lock().unwrap();
     let queues = (0..num)
       .map(|_| {
         let (p, c) = bounded_spsc_queue::make(2);
