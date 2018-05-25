@@ -1,4 +1,4 @@
-#![feature(box_syntax, fn_traits, try_from, unboxed_closures)]
+#![feature(allocator_api, box_syntax, fn_traits, try_from, unboxed_closures)]
 
 extern crate bounded_spsc_queue;
 #[macro_use]

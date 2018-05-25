@@ -7,25 +7,36 @@ use ndarray;
 
 use ffi::runtime::{
   DLContext, DLDataType, DLDataTypeCode_kDLFloat, DLDataTypeCode_kDLInt, DLDataTypeCode_kDLUInt,
-  DLTensor,
+  DLDeviceType_kDLCPU, DLTensor,
 };
 
 #[derive(Debug)]
 pub struct TVMContext {
-  pub device_type: u32,
-  pub device_id: i32,
+  pub device_type: usize,
+  pub device_id: usize,
+}
+
+impl Default for TVMContext {
+  fn default() -> Self {
+    Self {
+      device_type: DLDeviceType_kDLCPU as usize,
+      device_id: 0,
+    }
+  }
 }
 
 #[derive(Debug)]
-pub struct Tensor {
-  pub data: Vec<u8>,
-  pub ctx: TVMContext,
-  pub ndim: usize,
-  pub dtype: DLDataType,
-  pub shape: Vec<i64>,
-  pub strides: Option<Vec<i64>>,
-  pub byte_offset: u64,
+pub struct Tensor<T> {
+  pub(super) data: T,
+  pub(super) ctx: TVMContext,
+  pub(super) ndim: usize,
+  pub(super) dtype: DLDataType,
+  pub(super) shape: Vec<usize>,
+  pub(super) strides: Option<Vec<usize>>,
+  pub(super) byte_offset: usize,
 }
+pub type OwnedTensor = Tensor<Vec<u8>>;
+pub type ViewTensor<'a> = Tensor<&'a [u8]>;
 
 pub type DataType = DLDataType;
 
@@ -49,6 +60,15 @@ macro_rules! impl_from_array {
       }
     }
   };
+}
+
+impl Default for DLContext {
+  fn default() -> Self {
+    DLContext {
+      device_type: DLDeviceType_kDLCPU,
+      device_id: 0,
+    }
+  }
 }
 
 impl_from_array!(f32, DLDataTypeCode_kDLFloat);
