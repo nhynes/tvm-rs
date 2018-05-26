@@ -7,7 +7,7 @@ use ffi::runtime::{
 
 use errors::*;
 
-pub type PackedFunc = Box<FnOnce(&[TVMArgValue]) -> TVMRetValue + Send>;
+pub type PackedFunc = Box<Fn(&[TVMArgValue]) -> TVMRetValue>;
 
 #[macro_export]
 macro_rules! call_packed {
@@ -16,6 +16,7 @@ macro_rules! call_packed {
   };
 }
 
+#[derive(Clone, Copy)]
 pub struct TVMArgValue {
   value: TVMValue,
   type_code: i64,

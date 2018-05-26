@@ -4,6 +4,8 @@ extern crate bounded_spsc_queue;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
+extern crate itertools;
+#[macro_use]
 extern crate lazy_static;
 extern crate ndarray;
 #[macro_use]
