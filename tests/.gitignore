@@ -1,2 +1,3 @@
-graph.json
-graph.params
+*.json
+*.params
+*.o
