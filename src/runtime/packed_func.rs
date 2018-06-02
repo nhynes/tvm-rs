@@ -1,4 +1,4 @@
-use std::{any::Any, convert::TryFrom, os::raw::c_void};
+use std::{any::Any, convert::TryFrom, marker::PhantomData, os::raw::c_void};
 
 use ffi::runtime::{
   BackendPackedCFunc, DLDataTypeCode_kDLFloat, DLDataTypeCode_kDLInt, DLTensor,
@@ -17,18 +17,20 @@ macro_rules! call_packed {
 }
 
 #[derive(Clone, Copy)]
-pub struct TVMArgValue {
+pub struct TVMArgValue<'a> {
+  _lifetime: PhantomData<&'a ()>,
   value: TVMValue,
   type_code: i64,
 }
 
 macro_rules! impl_prim_tvm_arg {
   ($type:ty, $field:ident, $code:expr, $as:ty) => {
-    impl From<$type> for TVMArgValue {
+    impl<'a> From<$type> for TVMArgValue<'a> {
       fn from(val: $type) -> Self {
         TVMArgValue {
           value: TVMValue { $field: val as $as },
           type_code: $code as i64,
+          _lifetime: PhantomData,
         }
       }
     }
@@ -54,35 +56,50 @@ impl_prim_tvm_arg!(i64, v_int64);
 impl_prim_tvm_arg!(u64, v_int64);
 impl_prim_tvm_arg!(bool, v_int64);
 
-impl<T> From<*const T> for TVMArgValue {
+impl<'a, T> From<*const T> for TVMArgValue<'a> {
   fn from(ptr: *const T) -> Self {
     TVMArgValue {
       value: TVMValue {
         v_handle: ptr as *mut T as *mut c_void,
       },
       type_code: TVMTypeCode_kArrayHandle as i64,
+      _lifetime: PhantomData,
     }
   }
 }
 
-impl<T> From<*mut T> for TVMArgValue {
+impl<'a, T> From<*mut T> for TVMArgValue<'a> {
   fn from(ptr: *mut T) -> Self {
     TVMArgValue {
       value: TVMValue {
         v_handle: ptr as *mut c_void,
       },
       type_code: TVMTypeCode_kHandle as i64,
+      _lifetime: PhantomData,
     }
   }
 }
 
-impl<'a> From<&'a mut DLTensor> for TVMArgValue {
+impl<'a> From<&'a mut DLTensor> for TVMArgValue<'a> {
   fn from(arr: &'a mut DLTensor) -> Self {
     TVMArgValue {
       value: TVMValue {
         v_handle: arr as *mut _ as *mut c_void,
       },
       type_code: TVMTypeCode_kArrayHandle as i64,
+      _lifetime: PhantomData,
+    }
+  }
+}
+
+impl<'a> From<&'a DLTensor> for TVMArgValue<'a> {
+  fn from(arr: &'a DLTensor) -> Self {
+    TVMArgValue {
+      value: TVMValue {
+        v_handle: arr as *const _ as *mut DLTensor as *mut c_void,
+      },
+      type_code: TVMTypeCode_kArrayHandle as i64,
+      _lifetime: PhantomData,
     }
   }
 }
@@ -171,8 +188,8 @@ pub(in runtime) fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedF
         .as_ptr(),
       args
         .iter()
-        .map(|ref arg| arg.type_code)
-        .collect::<Vec<i64>>()
+        .map(|ref arg| arg.type_code as i32)
+        .collect::<Vec<i32>>()
         .as_ptr() as *const i32,
       args.len() as i32,
     );

@@ -1,11 +1,4 @@
-use std::{
-  cmp,
-  collections::HashMap,
-  convert::TryFrom,
-  heap::{Alloc, Heap, Layout},
-  iter::FromIterator,
-  str,
-};
+use std::{cmp, collections::HashMap, convert::TryFrom, iter::FromIterator, str};
 
 use nom::{alpha1, digit1, le_i32, le_i64, le_u16, le_u32, le_u64, le_u8, types::CompleteStr};
 use serde_json;
@@ -181,12 +174,16 @@ impl<'m> GraphExecutor<'m> {
           .iter()
           .map(|entry| graph.entry_index(entry))
           .chain((0..num_outputs).map(|oi| Ok(node_row_ptr[oi].clone())));
-        let args = arg_indices
-          .map(|idx| Ok(TVMArgValue::from(&mut DLTensor::from(&tensors[idx?]))))
-          .collect::<Result<Vec<TVMArgValue>>>()?;
+        let dl_tensors = arg_indices
+          .map(|idx| Ok(DLTensor::from(&tensors[idx?])))
+          .collect::<Result<Vec<DLTensor>>>()
+          .unwrap();
         let op: Box<Fn()> = box move || {
+          let args = dl_tensors
+            .iter()
+            .map(|t| t.into())
+            .collect::<Vec<TVMArgValue>>();
           func(args.as_slice());
-          // func.call_box((args.as_slice(),));
         };
         Ok(op)
       })
