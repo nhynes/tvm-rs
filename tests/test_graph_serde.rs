@@ -9,12 +9,12 @@ use std::{collections::HashMap, convert::TryFrom, fs, io::Read};
 
 use tvm::{
   errors::*,
-  runtime::{Graph, GraphExecutor, SystemLibModule, Tensor},
+  runtime::{Graph, Tensor},
 };
 
 fn load_graph() -> Result<Graph> {
   Graph::try_from(
-    &fs::read_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/graph.json")).unwrap(),
+    &fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/graph.json")).unwrap(),
   )
 }
 
