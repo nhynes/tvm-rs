@@ -42,25 +42,4 @@ pub extern "C" fn TVMBackendRegisterSystemLibSymbol(
     .lock()
     .unwrap()
     .insert(name.to_string(), func);
-
-  // // XXX: remove testing bit
-  // if name == "default_function" {
-  //   let mut in_nd = Array1::<f32>::zeros(4);
-  //   let mut out_nd = Array1::<f32>::zeros(4);
-  //   println!("arr: {:?}", out_nd);
-  //   let mut in_arr = DLTensor::from(&mut in_nd);
-  //   let mut out_arr = DLTensor::from(&mut out_nd);
-  //   call_packed!(wrap_backend_packed_func(func), &mut in_arr, &mut out_arr);
-  //   // func(
-  //   //   [
-  //   //   in_arr
-  //   //     &mut in_arr as *mut _ as *mut c_void,
-  //   //     &mut out_arr as *mut _ as *mut c_void,
-  //   //   ].as_ptr() as *const c_void,
-  //   //   [7, 7].as_ptr(),
-  //   //   2,
-  //   // );
-  //   println!("that seemed to work?",);
-  //   println!("{:?}", Array1::<f32>::from(out_nd).scalar_sum())
-  // }
 }

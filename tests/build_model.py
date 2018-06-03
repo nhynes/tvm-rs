@@ -5,7 +5,7 @@ from os import path as osp
 import nnvm
 from nnvm import sym
 from nnvm.compiler import graph_util
-from nnvm.testing import init, mlp as model
+from nnvm.testing import init
 import numpy as np
 import tvm
 
