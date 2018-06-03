@@ -5,10 +5,11 @@ mod module;
 mod packed_func;
 mod graph;
 mod threading;
+mod workspace;
 
 use std::{ffi::CStr, os::raw::c_char};
 
-pub use self::{array::*, graph::*, module::*, packed_func::*, threading::*};
+pub use self::{array::*, graph::*, module::*, packed_func::*, threading::*, workspace::*};
 
 #[no_mangle]
 pub extern "C" fn TVMAPISetLastError(cmsg: *const c_char) {
