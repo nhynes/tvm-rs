@@ -1,3 +1,4 @@
+mod allocator;
 mod array;
 mod module;
 #[macro_use]

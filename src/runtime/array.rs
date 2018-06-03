@@ -1,6 +1,5 @@
 use std::{
   convert::TryFrom,
-  heap::{Alloc, Heap, Layout},
   mem,
   os::raw::{c_int, c_void},
   ptr,
@@ -8,13 +7,12 @@ use std::{
 
 use ndarray;
 
+use super::allocator::Allocation;
 use errors::*;
 use ffi::runtime::{
   DLContext, DLDataType, DLDataTypeCode_kDLFloat, DLDataTypeCode_kDLInt, DLDataTypeCode_kDLUInt,
   DLDeviceType_kDLCPU, DLTensor,
 };
-
-const DEFAULT_ALIGN_BYTES: usize = 4;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TVMContext {
@@ -40,51 +38,41 @@ impl Default for TVMContext {
   }
 }
 
-pub struct Storage {
-  ptr: *mut u8,
-  layout: Option<Layout>,
+pub enum Storage {
+  Owned(Allocation),
+  View(*mut u8),
 }
 
 impl Storage {
-  pub fn new(size: usize, align: Option<usize>) -> Result<Self> {
-    let layout = Layout::from_size_align(size, align.unwrap_or(DEFAULT_ALIGN_BYTES)).unwrap();
-    let ptr = unsafe { Heap::default().alloc(layout.clone())? };
-    Ok(Self {
-      ptr: ptr,
-      layout: Some(layout),
-    })
+  pub fn new(size: usize, align: Option<usize>) -> Result<Storage> {
+    Ok(Storage::Owned(Allocation::new(size, align)?))
   }
 
   pub fn as_mut_ptr(&self) -> *mut u8 {
-    self.ptr
+    match self {
+      Storage::Owned(alloc) => alloc.as_mut_ptr(),
+      Storage::View(ptr) => *ptr,
+    }
+  }
+
+  pub fn view(&self) -> Storage {
+    match self {
+      Storage::Owned(alloc) => Storage::View(alloc.as_mut_ptr()),
+      Storage::View(ptr) => Storage::View(ptr.clone()),
+    }
+  }
+
+  pub fn offset(&self, offset: isize) -> Storage {
+    Storage::View(unsafe { self.as_mut_ptr().offset(offset) })
   }
 }
 
 impl<'a> TryFrom<&'a [u8]> for Storage {
   type Error = Error;
   fn try_from(slice: &'a [u8]) -> Result<Self> {
-    let storage = Storage::new(slice.len(), Some(DEFAULT_ALIGN_BYTES))?;
-    unsafe { storage.ptr.copy_from(slice.as_ptr(), slice.len()) }
+    let storage = Storage::new(slice.len(), None)?;
+    unsafe { storage.as_mut_ptr().copy_from(slice.as_ptr(), slice.len()) }
     Ok(storage)
-  }
-}
-
-impl Drop for Storage {
-  fn drop(&mut self) {
-    if self.layout.is_some() {
-      unsafe {
-        Heap::default().dealloc(self.ptr, self.layout.take().unwrap());
-      }
-    }
-  }
-}
-
-impl Clone for Storage {
-  fn clone(&self) -> Self {
-    Self {
-      ptr: self.ptr,
-      layout: None,
-    }
   }
 }
 
