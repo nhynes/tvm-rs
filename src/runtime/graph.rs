@@ -47,6 +47,41 @@ pub struct Node {
   pub control_deps: Option<Vec<Entry>>,
 }
 
+struct NodeAttrs {
+  func_name: String,
+  num_outputs: usize,
+  flatten_data: bool,
+}
+
+impl Node {
+  fn parse_attrs(&self) -> Result<NodeAttrs> {
+    let attrs = self
+      .attrs
+      .as_ref()
+      .ok_or(format!("Missing node.attrs for `{}`", self.name))?;
+    let func_name = attrs
+      .get("func_name")
+      .ok_or(format!("Node `{}` is missing attrs.func_name", self.name))?
+      .to_string();
+    let num_outputs = attrs
+      .get("num_outputs")
+      .ok_or(format!("Node `{}` is missing attrs.num_outputs", self.name))?
+      .parse::<usize>()?;
+    let flatten_data = attrs
+      .get("flatten_data")
+      .ok_or(format!(
+        "Node `{}` is missing attrs.flatten_data",
+        self.name
+      ))?
+      .parse::<u8>()? == 1;
+    Ok(NodeAttrs {
+      func_name,
+      num_outputs,
+      flatten_data,
+    })
+  }
+}
+
 impl<'a> TryFrom<&'a String> for Graph {
   type Error = Error;
   fn try_from(graph_json: &String) -> Result<Self> {
@@ -61,10 +96,10 @@ pub struct GraphExecutor<'m> {
 }
 
 impl<'m> GraphExecutor<'m> {
-  pub fn new<M: 'm + Module>(graph: &Graph, lib: &'m M) -> Result<Self> {
-    let tensors = Self::setup_storages(graph)?;
+  pub fn new<M: 'm + Module>(graph: Graph, lib: &'m M) -> Result<Self> {
+    let tensors = Self::setup_storages(&graph)?;
     Ok(GraphExecutor {
-      op_execs: Self::setup_op_execs(graph, lib, &tensors)?,
+      op_execs: Self::setup_op_execs(&graph, lib, &tensors)?,
       tensors: tensors,
     })
   }
@@ -133,12 +168,13 @@ impl<'m> GraphExecutor<'m> {
 
     let tensors = izip!(storage_ids, shapes, dtypes)
       .map(|(storage_id, shape, dtype)| Tensor {
-        data: storage.clone(),
+        data: storage.offset(offsets[storage_id] as isize),
         ctx: TVMContext::default(),
         dtype: dtype,
+        numel: shape.iter().product(),
         shape: shape,
         strides: None,
-        byte_offset: offsets[storage_id],
+        byte_offset: 0,
       })
       .collect();
 
@@ -155,27 +191,29 @@ impl<'m> GraphExecutor<'m> {
     graph
       .nodes
       .iter()
-      .filter(|node| node.op != "null")
-      .map(|node| {
+      .enumerate()
+      .filter(|(_i, node)| node.op != "null")
+      .map(|(i, node)| {
         ensure!(node.op == "tvm_op", "Only TVM ops are supported.");
         ensure!(node.attrs.is_some(), "Missing node_row_ptr.");
-        let node_attrs = node.attrs.as_ref().unwrap();
-        let func_name = node_attrs.get("func_name").unwrap();
+        let attrs = node.parse_attrs()?;
         let func = lib
-          .get_function(func_name)
-          .ok_or(format!("Missing function {}", func_name))?;
-        let num_outputs = node_attrs
-          .get("num_outputs")
-          .unwrap()
-          .parse::<usize>()
-          .unwrap();
+          .get_function(&attrs.func_name)
+          .ok_or(format!("Missing function {}", attrs.func_name))?;
         let arg_indices = node
           .inputs
           .iter()
           .map(|entry| graph.entry_index(entry))
-          .chain((0..num_outputs).map(|oi| Ok(node_row_ptr[oi].clone())));
+          .chain((0..attrs.num_outputs).map(|oi| Ok(node_row_ptr[i].clone() + oi)));
         let dl_tensors = arg_indices
-          .map(|idx| Ok(DLTensor::from(&tensors[idx?])))
+          .map(|idx| {
+            let tensor = &tensors[idx?];
+            Ok(if attrs.flatten_data {
+              DLTensor::from_flat(tensor)
+            } else {
+              DLTensor::from(tensor)
+            })
+          })
           .collect::<Result<Vec<DLTensor>>>()
           .unwrap();
         let op: Box<Fn()> = box move || {
@@ -252,6 +290,7 @@ named!(
       data: Storage::try_from(data).unwrap(),
       ctx: ctx,
       dtype: dtype,
+      numel: shape.iter().product(),
       shape: shape,
       strides: None,
       byte_offset: 0,

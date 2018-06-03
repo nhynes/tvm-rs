@@ -1,4 +1,4 @@
-use std::heap;
+use std::{heap, num};
 
 use serde_json;
 
@@ -22,5 +22,6 @@ error_chain! {
   foreign_links {
     Alloc(heap::AllocErr);
     GraphDeserialize(serde_json::Error);
+    ParseInt(num::ParseIntError);
   }
 }

@@ -83,6 +83,7 @@ pub struct Tensor {
   pub(super) shape: Vec<usize>,
   pub(super) strides: Option<Vec<usize>>,
   pub(super) byte_offset: usize,
+  pub(super) numel: usize,
 }
 
 impl<'a> From<&'a mut Tensor> for DLTensor {
@@ -98,6 +99,21 @@ impl<'a> From<&'a mut Tensor> for DLTensor {
         .as_ref()
         .map(|strides| strides.as_ptr())
         .unwrap_or(ptr::null_mut()) as *mut i64,
+      byte_offset: tensor.byte_offset as u64,
+    }
+  }
+}
+
+impl DLTensor {
+  pub(super) fn from_flat<'a>(tensor: &'a Tensor) -> DLTensor {
+    assert!(tensor.strides.is_none());
+    DLTensor {
+      data: tensor.data.as_mut_ptr() as *mut c_void,
+      ctx: DLContext::from(&tensor.ctx),
+      ndim: 1,
+      dtype: DLDataType::from(&tensor.dtype),
+      shape: &tensor.numel as *const _ as *mut i64,
+      strides: ptr::null_mut() as *mut i64,
       byte_offset: tensor.byte_offset as u64,
     }
   }
