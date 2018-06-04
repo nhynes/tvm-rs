@@ -1,5 +1,6 @@
 use std::{heap, num};
 
+use ndarray;
 use serde_json;
 
 error_chain! {
@@ -23,5 +24,6 @@ error_chain! {
     Alloc(heap::AllocErr);
     GraphDeserialize(serde_json::Error);
     ParseInt(num::ParseIntError);
+    ShapeError(ndarray::ShapeError);
   }
 }

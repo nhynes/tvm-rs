@@ -1,6 +1,7 @@
 use std::{cmp, collections::HashMap, convert::TryFrom, iter::FromIterator, str};
 
 use nom::{alpha1, digit1, le_i32, le_i64, le_u16, le_u32, le_u64, le_u8, types::CompleteStr};
+use serde;
 use serde_json;
 
 use super::{DataType, Module, Storage, TVMArgValue, TVMContext, Tensor};
@@ -35,6 +36,23 @@ impl Graph {
       .as_ref()
       .map(|nrp| nrp[entry.id] + entry.index)
       .ok_or("Missing node_row_ptr.".into())
+  }
+
+  fn get_attr<T: serde::de::DeserializeOwned>(&self, attr: &str) -> Result<T> {
+    Ok(serde_json::from_value::<T>(
+      self
+        .attrs
+        .as_ref()
+        .ok_or(ErrorKind::GraphFormatError(
+          "Missing graph attrs".to_string(),
+        ))?
+        .get(attr)
+        .ok_or(ErrorKind::GraphFormatError(format!(
+          "Missing {} attr",
+          attr
+        )))?
+        .to_owned(),
+    )?)
   }
 }
 
@@ -91,6 +109,7 @@ impl<'a> TryFrom<&'a String> for Graph {
 }
 
 pub struct GraphExecutor<'m> {
+  graph: Graph,
   op_execs: Vec<Box<Fn() + 'm>>,
   tensors: Vec<Tensor>,
 }
@@ -101,6 +120,7 @@ impl<'m> GraphExecutor<'m> {
     Ok(GraphExecutor {
       op_execs: Self::setup_op_execs(&graph, lib, &tensors)?,
       tensors: tensors,
+      graph: graph,
     })
   }
 
@@ -111,36 +131,11 @@ impl<'m> GraphExecutor<'m> {
   }
 
   fn setup_storages(graph: &Graph) -> Result<Vec<Tensor>> {
-    let graph_attrs = graph.attrs.as_ref().ok_or(ErrorKind::GraphFormatError(
-      "Missing graph attrs".to_string(),
-    ))?;
-
-    let storage_ids = serde_json::from_value::<(String, Vec<usize>)>(
-      graph_attrs
-        .get("storage_id")
-        .ok_or(ErrorKind::GraphFormatError(
-          "Missing storage_id attr".to_string(),
-        ))?
-        .to_owned(),
-    )?.1;
-
-    let shapes = serde_json::from_value::<(String, Vec<Vec<usize>>)>(
-      graph_attrs
-        .get("shape")
-        .ok_or(ErrorKind::GraphFormatError(
-          "Missing shape attr".to_string(),
-        ))?
-        .to_owned(),
-    )?.1;
-
-    let dtypes = serde_json::from_value::<(String, Vec<String>)>(
-      graph_attrs
-        .get("dltype")
-        .ok_or(ErrorKind::GraphFormatError(
-          "Missing dltype attr".to_string(),
-        ))?
-        .to_owned(),
-    )?.1
+    let storage_ids = graph.get_attr::<(String, Vec<usize>)>("storage_id")?.1;
+    let shapes = graph.get_attr::<(String, Vec<Vec<usize>>)>("shape")?.1;
+    let dtypes = graph
+      .get_attr::<(String, Vec<String>)>("dltype")?
+      .1
       .iter()
       .map(|dltype| {
         if let Ok((_, dtype)) = tvm_str_to_type(CompleteStr(dltype)) {
@@ -160,21 +155,21 @@ impl<'m> GraphExecutor<'m> {
     }
 
     let storage = Storage::new(storage_num_bytes.iter().sum(), align)?;
-    let mut offsets = vec![0; storage_ids.len()]; //Vec::with_capacity(storage_ids.len());
+    let mut offsets = vec![0; storage_ids.len()];
     offsets[0] = 0;
-    for i in 0..(offsets.len() - 2) {
-      offsets[i + 1] = offsets[i] + storage_num_bytes[i];
+    for i in 0..(offsets.len() - 1) {
+      offsets[i + 1] = offsets[i] + storage_num_bytes[i] as isize;
     }
 
     let tensors = izip!(storage_ids, shapes, dtypes)
       .map(|(storage_id, shape, dtype)| Tensor {
-        data: storage.offset(offsets[storage_id] as isize),
+        data: storage.view(),
         ctx: TVMContext::default(),
         dtype: dtype,
         numel: shape.iter().product(),
         shape: shape,
         strides: None,
-        byte_offset: 0,
+        byte_offset: offsets[storage_id],
       })
       .collect();
 
@@ -205,11 +200,12 @@ impl<'m> GraphExecutor<'m> {
           .iter()
           .map(|entry| graph.entry_index(entry))
           .chain((0..attrs.num_outputs).map(|oi| Ok(node_row_ptr[i].clone() + oi)));
+
         let dl_tensors = arg_indices
           .map(|idx| {
             let tensor = &tensors[idx?];
             Ok(if attrs.flatten_data {
-              DLTensor::from_flat(tensor)
+              DLTensor::from_tensor(tensor, true /* flatten */)
             } else {
               DLTensor::from(tensor)
             })
@@ -228,8 +224,48 @@ impl<'m> GraphExecutor<'m> {
       .collect()
   }
 
-  fn load_params(&self, params: HashMap<String, Tensor>) {
-    // TODO
+  pub fn load_params(&mut self, params: &HashMap<String, Tensor>) {
+    params.into_iter().for_each(|(name, param)| {
+      self.set_input(name, param);
+    })
+  }
+
+  pub fn set_input<S: AsRef<str>>(&mut self, name: S, value: &Tensor) {
+    if let Some(idx) = self.get_input_index(name.as_ref()) {
+      self.tensors[idx].copy(value);
+    } else {
+      eprintln!("Unexpected input `{}`", name.as_ref());
+    }
+  }
+
+  pub fn get_input<S: AsRef<str>>(&mut self, name: S) -> Option<&Tensor> {
+    self
+      .get_input_index(name.as_ref())
+      .and_then(move |idx| Some(&self.tensors[idx]))
+  }
+
+  pub fn get_output(&self, idx: usize) -> Option<&Tensor> {
+    let graph = &self.graph;
+    graph.heads.get(idx).and_then(|entry| {
+      graph
+        .entry_index(entry)
+        .map(|idx| self.tensors.get(idx))
+        .unwrap_or(None)
+    })
+  }
+
+  pub fn get_input_index<S: AsRef<str>>(&self, name: S) -> Option<usize> {
+    let graph = &self.graph;
+    (0..graph.nodes.len())
+      .skip_while(|&i| graph.nodes[i].name != name.as_ref())
+      .nth(0)
+      .and_then(|i| {
+        if graph.arg_nodes.iter().any(|&id| id == i) {
+          graph.node_row_ptr.as_ref().map(|nrp| nrp[i])
+        } else {
+          None
+        }
+      })
   }
 }
 
