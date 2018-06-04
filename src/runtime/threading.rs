@@ -26,7 +26,7 @@ use ffi::runtime::TVMParallelGroupEnv;
 type FTVMParallelLambda =
   extern "C" fn(task_id: usize, penv: *const TVMParallelGroupEnv, cdata: *const c_void) -> i32;
 
-pub struct Job {
+struct Job {
   cb: FTVMParallelLambda,
   cdata: *const c_void,
   req_num_tasks: usize,
@@ -87,7 +87,7 @@ impl FnOnce<()> for Task {
 }
 
 #[derive(Default)]
-pub struct Threads {
+struct Threads {
   #[allow(unused)]
   #[cfg(not(target_env = "sgx"))]
   handles: Vec<JoinHandle<()>>,
@@ -216,14 +216,25 @@ pub extern "C" fn TVMBackendParallelLaunch(
   cdata: *const c_void,
   num_task: usize,
 ) {
-  THREAD_POOL.with(|pool| {
-    pool.launch(Job {
-      cb: cb,
-      cdata: cdata,
-      req_num_tasks: num_task,
-      pending: Arc::new(ATOMIC_USIZE_INIT),
+  if max_concurrency() == 0 {
+    let penv = TVMParallelGroupEnv {
+      sync_handle: 0 as *mut c_void,
+      num_task: 1,
+    };
+    cb(0, &penv as *const _, cdata);
+
+    #[cfg(feature = "par-launch-alloc")]
+    let break_the_heap: Vec<u8> = Vec::new(); // TODO: why does allocating break?
+  } else {
+    THREAD_POOL.with(|pool| {
+      pool.launch(Job {
+        cb: cb,
+        cdata: cdata,
+        req_num_tasks: num_task,
+        pending: Arc::new(ATOMIC_USIZE_INIT),
+      });
     });
-  });
+  }
 }
 
 #[no_mangle]
