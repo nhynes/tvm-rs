@@ -1,4 +1,4 @@
-use std::heap::{Alloc, Heap, Layout};
+use std::alloc::{self, Layout};
 
 use errors::*;
 
@@ -13,11 +13,11 @@ pub struct Allocation {
 impl Allocation {
   pub fn new(size: usize, align: Option<usize>) -> Result<Self> {
     let alignment = align.unwrap_or(DEFAULT_ALIGN_BYTES);
-    let layout = Layout::from_size_align(size, alignment).ok_or(format!(
-      "Unable to alloc {} bytes with alignment {}.",
-      size, alignment
-    ))?;
-    let ptr = unsafe { Heap::default().alloc(layout.clone())? };
+    let layout = Layout::from_size_align(size, alignment)?;
+    let ptr = unsafe { alloc::alloc(layout.clone()) };
+    if ptr.is_null() {
+      alloc::oom(layout);
+    }
     Ok(Self {
       ptr: ptr,
       layout: layout,
@@ -36,7 +36,7 @@ impl Allocation {
 impl Drop for Allocation {
   fn drop(&mut self) {
     unsafe {
-      Heap::default().dealloc(self.ptr, self.layout.clone());
+      alloc::dealloc(self.ptr, self.layout.clone());
     }
   }
 }

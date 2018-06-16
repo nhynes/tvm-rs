@@ -1,4 +1,4 @@
-use std::{heap, num};
+use std::{alloc, num};
 
 use ndarray;
 use serde_json;
@@ -21,7 +21,8 @@ error_chain! {
     }
   }
   foreign_links {
-    Alloc(heap::AllocErr);
+    Alloc(alloc::AllocErr);
+    Layout(alloc::LayoutErr);
     GraphDeserialize(serde_json::Error);
     ParseInt(num::ParseIntError);
     ShapeError(ndarray::ShapeError);
