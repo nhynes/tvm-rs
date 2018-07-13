@@ -174,11 +174,12 @@ macro_rules! impl_boxed_ret_value {
   };
 }
 
-impl_prim_ret_value!(f64, 8);
-impl_prim_ret_value!(i8, 3);
+impl_prim_ret_value!(i32, 0);
+impl_prim_ret_value!(u32, 1);
+impl_prim_ret_value!(f32, 2);
 impl_boxed_ret_value!(String, 11);
 
-pub(in runtime) fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedFunc {
+pub(super) fn wrap_backend_packed_func(func: BackendPackedCFunc) -> PackedFunc {
   box move |args: &[TVMArgValue]| {
     func(
       args

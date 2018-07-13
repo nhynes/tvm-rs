@@ -36,10 +36,11 @@ impl Default for SystemLibModule {
 pub extern "C" fn TVMBackendRegisterSystemLibSymbol(
   cname: *const c_char,
   func: BackendPackedCFunc,
-) {
+) -> i32 {
   let name = unsafe { CStr::from_ptr(cname).to_str().unwrap() };
   SYSTEM_LIB_FUNCTIONS
     .lock()
     .unwrap()
     .insert(name.to_string(), func);
+  return 0;
 }
