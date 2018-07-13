@@ -108,6 +108,14 @@ impl<'a> TryFrom<&'a String> for Graph {
   }
 }
 
+impl<'a> TryFrom<&'a str> for Graph {
+  type Error = Error;
+  fn try_from(graph_json: &'a str) -> Result<Self> {
+    let graph = serde_json::from_str(graph_json)?;
+    Ok(graph)
+  }
+}
+
 pub struct GraphExecutor<'m> {
   graph: Graph,
   op_execs: Vec<Box<Fn() + 'm>>,
