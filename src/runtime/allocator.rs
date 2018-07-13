@@ -16,7 +16,7 @@ impl Allocation {
     let layout = Layout::from_size_align(size, alignment)?;
     let ptr = unsafe { alloc::alloc(layout.clone()) };
     if ptr.is_null() {
-      alloc::oom(layout);
+      alloc::handle_alloc_error(layout);
     }
     Ok(Self {
       ptr: ptr,

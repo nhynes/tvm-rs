@@ -2,7 +2,18 @@ extern crate bindgen;
 
 use std::{env, path::PathBuf};
 
+fn parse_clang_ver(raw_v: String) -> Vec<u32> {
+  raw_v
+    .split_whitespace()
+    .nth(2)
+    .unwrap()
+    .split('.')
+    .map(|v| v.parse::<u32>().unwrap())
+    .collect()
+}
+
 fn main() {
+  let clang_ver = parse_clang_ver(bindgen::clang_version().full);
   let bindings = bindgen::Builder::default()
     .header(concat!(
       env!("CARGO_MANIFEST_DIR"),
@@ -17,6 +28,13 @@ fn main() {
       "-I",
       env!("CARGO_MANIFEST_DIR"),
       "/tvm/dlpack/include"
+    ))
+    .clang_arg(format!("--target={}", env::var("HOST").unwrap()))
+    .clang_arg("-I/usr/include")
+    .clang_arg("-I/usr/local/include")
+    .clang_arg(format!(
+      "-I/usr/local/lib/clang/{}.{}.{}/include",
+      clang_ver[0], clang_ver[1], clang_ver[2]
     ))
     .layout_tests(false)
     .generate()
