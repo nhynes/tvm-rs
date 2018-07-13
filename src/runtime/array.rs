@@ -3,6 +3,7 @@ use std::{
   mem,
   os::raw::{c_int, c_void},
   ptr,
+  slice,
 };
 
 use ndarray;
@@ -244,29 +245,48 @@ impl Default for TVMContext {
   }
 }
 
+fn tensor_from_array_storage<T, D: ndarray::Dimension>(
+  arr: &ndarray::Array<T, D>,
+  storage: Storage,
+  type_code: usize,
+) -> Tensor {
+  let type_width = mem::size_of::<T>() as usize;
+  Tensor {
+    data: storage,
+    ctx: TVMContext::default(),
+    dtype: DataType {
+      code: type_code,
+      bits: 8 * type_width,
+      lanes: 1,
+    },
+    numel: arr.len(),
+    shape: arr.shape().into_iter().map(|&v| v as usize).collect(),
+    strides: Some(arr.strides().into_iter().map(|&v| v as usize).collect()),
+    byte_offset: 0,
+  }
+}
+
 macro_rules! impl_tensor_from_ndarray {
   ($type:ty, $typecode:expr) => {
+    impl<D: ndarray::Dimension> From<ndarray::Array<$type, D>> for Tensor {
+      fn from(arr: ndarray::Array<$type, D>) -> Self {
+        assert!(arr.is_standard_layout(), "Array must be contiguous.");
+        let numel = arr.len() * mem::size_of::<$type>() as usize;
+        let storage = Storage::try_from(unsafe {
+          slice::from_raw_parts(arr.as_ptr() as *const u8, numel)
+        }).unwrap();
+        tensor_from_array_storage(&arr, storage, $typecode as usize)
+      }
+    }
     impl<'a, D: ndarray::Dimension> From<&'a ndarray::Array<$type, D>> for Tensor {
       fn from(arr: &'a ndarray::Array<$type, D>) -> Self {
-        let dtype = DataType {
-          code: $typecode as usize,
-          bits: 8 * mem::size_of::<$type>() as usize,
-          lanes: 1,
-        };
-        let numel = arr
-          .shape()
-          .into_iter()
-          .map(|&v| v as usize)
-          .product::<usize>() as usize;
-        Self {
-          data: Storage::View(arr.as_ptr() as *mut u8, numel * dtype.itemsize()),
-          ctx: TVMContext::default(),
-          dtype: dtype,
-          numel: numel,
-          shape: arr.shape().into_iter().map(|&v| v as usize).collect(),
-          strides: Some(arr.strides().into_iter().map(|&v| v as usize).collect()),
-          byte_offset: 0,
-        }
+        assert!(arr.is_standard_layout(), "Array must be contiguous.");
+        let numel = arr.len() * mem::size_of::<$type>() as usize;
+        tensor_from_array_storage(
+          arr,
+          Storage::View(arr.as_ptr() as *mut u8, numel),
+          $typecode as usize,
+        )
       }
     }
   };
