@@ -1,4 +1,5 @@
 use std::{
+  any::TypeId,
   convert::TryFrom,
   mem,
   os::raw::{c_int, c_void},
@@ -15,27 +16,28 @@ use ffi::runtime::{
   DLDeviceType_kDLCPU, DLTensor,
 };
 
-pub enum Storage {
+#[derive(PartialEq)]
+pub enum Storage<'a> {
   Owned(Allocation),
-  View(*mut u8, usize),
+  View(&'a mut [u8]),
 }
 
-impl Storage {
-  pub fn new(size: usize, align: Option<usize>) -> Result<Storage> {
+impl<'a> Storage<'a> {
+  pub fn new(size: usize, align: Option<usize>) -> Result<Storage<'static>> {
     Ok(Storage::Owned(Allocation::new(size, align)?))
   }
 
   pub fn as_mut_ptr(&self) -> *mut u8 {
     match self {
       Storage::Owned(alloc) => alloc.as_mut_ptr(),
-      Storage::View(ptr, _size) => *ptr,
+      Storage::View(slice) => slice.as_ptr() as *mut u8,
     }
   }
 
   pub fn size(&self) -> usize {
     match self {
       Storage::Owned(alloc) => alloc.size(),
-      Storage::View(_ptr, size) => *size,
+      Storage::View(slice) => slice.len(),
     }
   }
 
@@ -43,39 +45,57 @@ impl Storage {
     self.as_mut_ptr() as *const _
   }
 
-  pub fn view(&self) -> Storage {
+  pub fn view(&self) -> Storage<'a> {
     match self {
-      Storage::Owned(alloc) => Storage::View(alloc.as_mut_ptr(), self.size()),
-      Storage::View(ptr, size) => Storage::View(ptr.clone(), *size),
+      Storage::Owned(alloc) => {
+        Storage::View(unsafe { slice::from_raw_parts_mut(alloc.as_mut_ptr(), self.size()) })
+      }
+      // Storage::View(ptr, size) => Storage::View(ptr.clone(), *size),
+      Storage::View(slice) => {
+        Storage::View(unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), slice.len()) })
+      }
+    }
+  }
+
+  pub fn is_owned(&self) -> bool {
+    match self {
+      Storage::Owned(_) => true,
+      _ => false,
     }
   }
 }
 
-impl<'a> TryFrom<&'a [u8]> for Storage {
-  type Error = Error;
-  fn try_from(slice: &'a [u8]) -> Result<Self> {
-    let storage = Storage::new(slice.len(), None)?;
-    unsafe { storage.as_mut_ptr().copy_from(slice.as_ptr(), slice.len()) }
-    Ok(storage)
+impl<'a, T> From<&'a [T]> for Storage<'a> {
+  fn from(data: &'a [T]) -> Self {
+    let data = unsafe {
+      slice::from_raw_parts_mut(
+        data.as_ptr() as *const u8 as *mut u8,
+        data.len() * mem::size_of::<T>() as usize,
+      )
+    };
+    Storage::View(data)
   }
 }
 
-pub struct Tensor {
-  pub(super) data: Storage,
+#[derive(PartialEq)]
+pub struct Tensor<'a> {
+  pub(super) data: Storage<'a>,
   pub(super) ctx: TVMContext,
   pub(super) dtype: DataType,
   pub(super) shape: Vec<usize>,
   pub(super) strides: Option<Vec<usize>>,
   pub(super) byte_offset: isize,
   pub(super) numel: usize,
+  pub(super) dshape: Vec<i64>,
 }
 
-impl Tensor {
+impl<'a> Tensor<'a> {
   pub fn shape(&self) -> Vec<usize> {
     self.shape.clone()
   }
 
-  pub(super) fn to_vec<T>(&self) -> Vec<T> {
+  pub fn to_vec<T: 'static>(&self) -> Vec<T> {
+    assert!(self.dtype.is_type::<T>());
     let mut vec: Vec<T> = Vec::with_capacity(self.numel * self.dtype.itemsize());
     unsafe {
       vec.as_mut_ptr().copy_from_nonoverlapping(
@@ -126,14 +146,14 @@ impl Tensor {
         .as_mut_ptr()
         .offset(self.byte_offset as isize)
         .copy_from_nonoverlapping(
-          other.data.as_mut_ptr(), //.offset(other.byte_offset),
+          other.data.as_mut_ptr().offset(other.byte_offset),
           other.numel * other.dtype.itemsize(),
         );
     }
   }
 }
 
-impl<'a> TryFrom<&'a Tensor> for ndarray::ArrayD<f32> {
+impl<'a, 't> TryFrom<&'a Tensor<'t>> for ndarray::ArrayD<f32> {
   type Error = Error;
   fn try_from(tensor: &'a Tensor) -> Result<ndarray::ArrayD<f32>> {
     ensure!(
@@ -157,9 +177,10 @@ impl DLTensor {
       ndim: if flatten { 1 } else { tensor.shape.len() } as i32,
       dtype: DLDataType::from(&tensor.dtype),
       shape: if flatten {
-        &tensor.numel
+        &tensor.numel as *const _ as *mut i64
       } else {
-        tensor.shape.as_ptr()
+        // tensor.shape.as_ptr()
+        tensor.dshape.as_ptr() as *mut i64
       } as *mut i64,
       strides: if flatten || tensor.is_contiguous() {
         ptr::null_mut()
@@ -171,14 +192,14 @@ impl DLTensor {
   }
 }
 
-impl<'a> From<&'a Tensor> for DLTensor {
-  fn from(tensor: &'a Tensor) -> Self {
+impl<'a, 't> From<&'a Tensor<'t>> for DLTensor {
+  fn from(tensor: &'a Tensor<'t>) -> Self {
     DLTensor::from_tensor(tensor, false /* flatten */)
   }
 }
 
-impl<'a> From<&'a mut Tensor> for DLTensor {
-  fn from(tensor: &'a mut Tensor) -> Self {
+impl<'a, 't> From<&'a mut Tensor<'t>> for DLTensor {
+  fn from(tensor: &'a mut Tensor<'t>) -> Self {
     DLTensor::from_tensor(tensor, false /* flatten */)
   }
 }
@@ -193,6 +214,19 @@ pub struct DataType {
 impl DataType {
   fn itemsize(&self) -> usize {
     (self.bits * self.lanes) >> 3
+  }
+
+  fn is_type<T: 'static>(&self) -> bool {
+    if self.lanes != 1 {
+      return false;
+    }
+    let typ = TypeId::of::<T>();
+    (typ == TypeId::of::<i32>() && self.code == 0 && self.bits == 32)
+      || (typ == TypeId::of::<i64>() && self.code == 0 && self.bits == 64)
+      || (typ == TypeId::of::<u32>() && self.code == 1 && self.bits == 32)
+      || (typ == TypeId::of::<u64>() && self.code == 1 && self.bits == 64)
+      || (typ == TypeId::of::<f32>() && self.code == 2 && self.bits == 32)
+      || (typ == TypeId::of::<f64>() && self.code == 2 && self.bits == 64)
   }
 }
 
@@ -221,7 +255,7 @@ impl Default for DLContext {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TVMContext {
   pub(super) device_type: usize,
   pub(super) device_id: usize,
@@ -245,11 +279,11 @@ impl Default for TVMContext {
   }
 }
 
-fn tensor_from_array_storage<T, D: ndarray::Dimension>(
+fn tensor_from_array_storage<'a, 's, T, D: ndarray::Dimension>(
   arr: &ndarray::Array<T, D>,
-  storage: Storage,
+  storage: Storage<'s>,
   type_code: usize,
-) -> Tensor {
+) -> Tensor<'s> {
   let type_width = mem::size_of::<T>() as usize;
   Tensor {
     data: storage,
@@ -260,15 +294,16 @@ fn tensor_from_array_storage<T, D: ndarray::Dimension>(
       lanes: 1,
     },
     numel: arr.len(),
-    shape: arr.shape().into_iter().map(|&v| v as usize).collect(),
+    shape: arr.shape().iter().map(|&v| v as usize).collect(),
     strides: Some(arr.strides().into_iter().map(|&v| v as usize).collect()),
     byte_offset: 0,
+    dshape: arr.shape().iter().map(|&v| v as i64).collect(),
   }
 }
 
 macro_rules! impl_tensor_from_ndarray {
   ($type:ty, $typecode:expr) => {
-    impl<D: ndarray::Dimension> From<ndarray::Array<$type, D>> for Tensor {
+    impl<D: ndarray::Dimension> From<ndarray::Array<$type, D>> for Tensor<'static> {
       fn from(arr: ndarray::Array<$type, D>) -> Self {
         assert!(arr.is_standard_layout(), "Array must be contiguous.");
         let numel = arr.len() * mem::size_of::<$type>() as usize;
@@ -278,13 +313,13 @@ macro_rules! impl_tensor_from_ndarray {
         tensor_from_array_storage(&arr, storage, $typecode as usize)
       }
     }
-    impl<'a, D: ndarray::Dimension> From<&'a ndarray::Array<$type, D>> for Tensor {
+    impl<'a, D: ndarray::Dimension> From<&'a ndarray::Array<$type, D>> for Tensor<'a> {
       fn from(arr: &'a ndarray::Array<$type, D>) -> Self {
         assert!(arr.is_standard_layout(), "Array must be contiguous.");
         let numel = arr.len() * mem::size_of::<$type>() as usize;
         tensor_from_array_storage(
           arr,
-          Storage::View(arr.as_ptr() as *mut u8, numel),
+          Storage::from(arr.as_slice().unwrap()),
           $typecode as usize,
         )
       }

@@ -1,4 +1,4 @@
-use std::{cmp, collections::HashMap, convert::TryFrom, iter::FromIterator, str};
+use std::{cmp, collections::HashMap, convert::TryFrom, iter::FromIterator, mem, str};
 
 use nom::{alpha1, digit1, le_i32, le_i64, le_u16, le_u32, le_u64, le_u8, types::CompleteStr};
 use serde;
@@ -116,13 +116,13 @@ impl<'a> TryFrom<&'a str> for Graph {
   }
 }
 
-pub struct GraphExecutor<'m> {
+pub struct GraphExecutor<'m, 't> {
   graph: Graph,
   op_execs: Vec<Box<Fn() + 'm>>,
-  tensors: Vec<Tensor>,
+  tensors: Vec<Tensor<'t>>,
 }
 
-impl<'m> GraphExecutor<'m> {
+impl<'m, 't> GraphExecutor<'m, 't> {
   pub fn new<M: 'm + Module>(graph: Graph, lib: &'m M) -> Result<Self> {
     let tensors = Self::setup_storages(&graph)?;
     Ok(GraphExecutor {
@@ -138,7 +138,7 @@ impl<'m> GraphExecutor<'m> {
     });
   }
 
-  fn setup_storages(graph: &Graph) -> Result<Vec<Tensor>> {
+  fn setup_storages<'a>(graph: &'a Graph) -> Result<Vec<Tensor<'t>>> {
     let storage_ids = graph.get_attr::<(String, Vec<usize>)>("storage_id")?.1;
     let shapes = graph.get_attr::<(String, Vec<Vec<usize>>)>("shape")?.1;
     let dtypes = graph
@@ -162,22 +162,24 @@ impl<'m> GraphExecutor<'m> {
       storage_num_bytes[storage_id] = cmp::max(nbytes, storage_num_bytes[storage_id]);
     }
 
-    let storage = Storage::new(storage_num_bytes.iter().sum(), align)?;
-    let mut offsets = vec![0; storage_ids.len()];
-    offsets[0] = 0;
-    for i in 0..(offsets.len() - 1) {
-      offsets[i + 1] = offsets[i] + storage_num_bytes[i] as isize;
-    }
+    let mut storages: Vec<Storage> = storage_num_bytes
+      .into_iter()
+      .map(|nbytes| Storage::new(nbytes, align))
+      .collect::<Result<Vec<Storage>>>()?;
 
     let tensors = izip!(storage_ids, shapes, dtypes)
-      .map(|(storage_id, shape, dtype)| Tensor {
-        data: storage.view(),
-        ctx: TVMContext::default(),
-        dtype: dtype,
-        numel: shape.iter().product(),
-        shape: shape,
-        strides: None,
-        byte_offset: offsets[storage_id],
+      .map(|(storage_id, shape, dtype)| {
+        let storage = storages[storage_id].view();
+        Tensor {
+          data: mem::replace(&mut storages[storage_id], storage),
+          ctx: TVMContext::default(),
+          dtype: dtype,
+          numel: shape.iter().product(),
+          dshape: shape.iter().map(|&v| v as i64).collect(),
+          shape: shape,
+          strides: None,
+          byte_offset: 0,
+        }
       })
       .collect();
 
@@ -187,7 +189,7 @@ impl<'m> GraphExecutor<'m> {
   fn setup_op_execs<M: 'm + Module>(
     graph: &Graph,
     lib: &'m M,
-    tensors: &Vec<Tensor>,
+    tensors: &Vec<Tensor<'t>>,
   ) -> Result<Vec<Box<Fn() + 'm>>> {
     ensure!(graph.node_row_ptr.is_some(), "Missing node_row_ptr.");
     let node_row_ptr = graph.node_row_ptr.as_ref().unwrap();
@@ -232,17 +234,28 @@ impl<'m> GraphExecutor<'m> {
       .collect()
   }
 
-  pub fn load_params(&mut self, params: &HashMap<String, Tensor>) {
+  pub fn load_params(&mut self, params: HashMap<String, Tensor<'t>>) {
     params.into_iter().for_each(|(name, param)| {
       self.set_input(name, param);
     })
   }
 
-  pub fn set_input<S: AsRef<str>>(&mut self, name: S, value: &Tensor) {
+  pub fn set_input<S: AsRef<str>>(&mut self, name: S, mut value: Tensor<'t>) {
     if let Some(idx) = self.get_input_index(name.as_ref()) {
-      self.tensors[idx].copy(value);
+      // TODO: consider `new_with_params` to avoid ever allocating
+      let ptr = self.tensors[idx].data.as_ptr();
+      let mut to_replace = self.tensors.iter_mut().filter(|t| t.data.as_ptr() == ptr);
+      let mut owner = to_replace.nth(0).unwrap();
+      if value.data.is_owned() {
+        owner.data = value.data;
+        to_replace.for_each(|t| {
+          t.data = owner.data.view();
+        });
+      } else {
+        owner.copy(&value);
+      }
     } else {
-      eprintln!("Unexpected input `{}`", name.as_ref());
+      println!("Unexpected input `{}`", name.as_ref());
     }
   }
 
@@ -335,6 +348,7 @@ named!(
       ctx: ctx,
       dtype: dtype,
       numel: shape.iter().product(),
+      dshape: shape.iter().map(|&v| v as i64).collect(),
       shape: shape,
       strides: None,
       byte_offset: 0,
