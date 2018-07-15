@@ -69,7 +69,7 @@ const WORKSPACE_PAGE_SIZE: usize = 4 << 10;
 pub extern "C" fn TVMBackendAllocWorkspace(
   _device_type: c_int,
   _device_id: c_int,
-  size: c_ulong,
+  size: u64,
   _dtype_code_hint: c_int,
   _dtype_bits_hint: c_int,
 ) -> *mut c_void {
@@ -83,7 +83,8 @@ pub extern "C" fn TVMBackendAllocWorkspace(
       Ok(ptr) => ptr,
       Err(_) => ptr::null_mut(),
     }) as *mut c_void
-  })
+  });
+  return ptr::null_mut();
 }
 
 #[no_mangle]
@@ -97,5 +98,6 @@ pub extern "C" fn TVMBackendFreeWorkspace(
       Ok(()) => 0,
       Err(_) => -1,
     }) as c_int
-  })
+  });
+  return 0;
 }
