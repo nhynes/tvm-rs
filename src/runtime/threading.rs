@@ -1,5 +1,5 @@
 use std::{
-  os::raw::c_void,
+  os::raw::{c_int, c_void},
   sync::{
     atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT},
     Arc,
@@ -187,7 +187,7 @@ lazy_static! {
   static ref SGX_QUEUES: Mutex<VecDeque<Consumer<Task>>> = Mutex::new(VecDeque::new());
 }
 
-#[cfg(not(target_env = "sgx"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_env = "sgx")))]
 fn max_concurrency() -> usize {
   if let Ok(threads_str) = env::var("TVM_NUM_THREADS").or(env::var("OMP_NUM_THREADS")) {
     if let Ok(threads) = usize::from_str_radix(&threads_str, 10) {
@@ -200,6 +200,11 @@ fn max_concurrency() -> usize {
 #[cfg(target_env = "sgx")]
 fn max_concurrency() -> usize {
   usize::from_str_radix(env!("TVM_NUM_THREADS"), 10).unwrap_or(1)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn max_concurrency() -> usize {
+  0
 }
 
 #[cfg(target_env = "sgx")]
@@ -215,7 +220,7 @@ pub extern "C" fn TVMBackendParallelLaunch(
   cb: FTVMParallelLambda,
   cdata: *const c_void,
   num_task: usize,
-) {
+) -> c_int {
   if max_concurrency() == 0 {
     let penv = TVMParallelGroupEnv {
       sync_handle: 0 as *mut c_void,
@@ -235,6 +240,7 @@ pub extern "C" fn TVMBackendParallelLaunch(
       });
     });
   }
+  return 0;
 }
 
 #[no_mangle]
