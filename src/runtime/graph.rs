@@ -240,17 +240,20 @@ impl<'m, 't> GraphExecutor<'m, 't> {
     })
   }
 
-  pub fn set_input<S: AsRef<str>>(&mut self, name: S, mut value: Tensor<'t>) {
+  pub fn set_input<S: AsRef<str>>(&mut self, name: S, value: Tensor<'t>) {
     if let Some(idx) = self.get_input_index(name.as_ref()) {
       // TODO: consider `new_with_params` to avoid ever allocating
       let ptr = self.tensors[idx].data.as_ptr();
       let mut to_replace = self.tensors.iter_mut().filter(|t| t.data.as_ptr() == ptr);
       let mut owner = to_replace.nth(0).unwrap();
       if value.data.is_owned() {
-        owner.data = value.data;
-        to_replace.for_each(|t| {
-          t.data = owner.data.view();
-        });
+        // FIXME: for no-copy, need setup_op_execs to not capture tensor ptr
+        // mem::replace(&mut (*owner), value);
+        // to_replace.for_each(|t| {
+        //   panic!("replacing");
+        //   t.data = owner.data.view();
+        // });
+        owner.copy(&value);
       } else {
         owner.copy(&value);
       }
@@ -344,7 +347,7 @@ named!(
     take!(8) >> bits!(tag_bits!(u64, 64, 0)) >> ctx: tvm_ctx >> ndim: le_u32 >> dtype: data_type
       >> shape: count!(map!(le_i64, |sz| sz as usize), ndim as usize) >> length: le_i64
       >> data: take!(length) >> (Tensor {
-      data: Storage::try_from(data).unwrap(),
+      data: Storage::from(data),
       ctx: ctx,
       dtype: dtype,
       numel: shape.iter().product(),

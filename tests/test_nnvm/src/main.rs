@@ -11,19 +11,6 @@ use std::{collections::HashMap, convert::TryFrom, fs, io::Read};
 use ndarray::Array;
 use tvm::runtime::{Graph, GraphExecutor, SystemLibModule, Tensor};
 
-fn load_graph() -> Graph {
-  Graph::try_from(&fs::read_to_string(concat!(env!("OUT_DIR"), "/graph.json")).unwrap()).unwrap()
-}
-
-fn load_params() -> HashMap<String, Tensor> {
-  let mut params_bytes = Vec::new();
-  fs::File::open(concat!(env!("OUT_DIR"), "/graph.params"))
-    .unwrap()
-    .read_to_end(&mut params_bytes)
-    .unwrap();
-  tvm::runtime::load_param_dict(&params_bytes).unwrap()
-}
-
 const BATCH_SIZE: usize = 4;
 const IN_DIM: usize = 8;
 
@@ -37,8 +24,21 @@ macro_rules! assert_sum_eq {
 
 fn main() {
   let syslib = SystemLibModule::default();
-  let mut exec = GraphExecutor::new(load_graph(), &syslib).unwrap();
-  let params = load_params();
+
+  let mut params_bytes = Vec::new();
+  fs::File::open(concat!(env!("OUT_DIR"), "/graph.params"))
+    .unwrap()
+    .read_to_end(&mut params_bytes)
+    .unwrap();
+  let params = tvm::runtime::load_param_dict(&params_bytes)
+    .unwrap()
+    .into_iter()
+    .map(|(k, v)| (k, v.to_owned()))
+    .collect::<HashMap<String, Tensor<'static>>>();
+
+  let graph =
+    Graph::try_from(&fs::read_to_string(concat!(env!("OUT_DIR"), "/graph.json")).unwrap()).unwrap();
+  let mut exec = GraphExecutor::new(graph, &syslib).unwrap();
 
   let x = Array::from_shape_vec(
     (BATCH_SIZE, IN_DIM),
@@ -57,8 +57,8 @@ fn main() {
   let expected_o0 = &left + 1f32;
   let expected_o1 = &right - 1f32;
 
-  exec.load_params(&params);
-  exec.set_input("data", &(&x).into());
+  exec.load_params(params);
+  exec.set_input("data", x.clone().into());
 
   assert_sum_eq!(Array::try_from(exec.get_input("data").unwrap()).unwrap(), x);
   assert_sum_eq!(

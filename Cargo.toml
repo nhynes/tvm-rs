@@ -1,9 +1,9 @@
 [package]
 name = "tvm"
-version = "0.0.0"
+version = "0.1.0"
 license = "Apache-2.0"
 description = "TVM Rust runtime"
-repository = "https://github.com/dmlc/tvm-rs"
+repository = "https://github.com/nhynes/tvm-rs"
 readme = "README.md"
 keywords = ["tvm", "nnvm"]
 categories = ["api-bindings", "science"]

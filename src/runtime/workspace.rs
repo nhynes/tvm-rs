@@ -1,6 +1,6 @@
 use std::{
   cell::RefCell,
-  os::raw::{c_int, c_ulong, c_void},
+  os::raw::{c_int, c_void},
   ptr,
 };
 

@@ -19,7 +19,7 @@ use ffi::runtime::{
 #[derive(PartialEq)]
 pub enum Storage<'a> {
   Owned(Allocation),
-  View(&'a mut [u8]),
+  View(&'a mut [u8], usize), // ptr, align
 }
 
 impl<'a> Storage<'a> {
@@ -30,14 +30,21 @@ impl<'a> Storage<'a> {
   pub fn as_mut_ptr(&self) -> *mut u8 {
     match self {
       Storage::Owned(alloc) => alloc.as_mut_ptr(),
-      Storage::View(slice) => slice.as_ptr() as *mut u8,
+      Storage::View(slice, _) => slice.as_ptr() as *mut u8,
     }
   }
 
   pub fn size(&self) -> usize {
     match self {
       Storage::Owned(alloc) => alloc.size(),
-      Storage::View(slice) => slice.len(),
+      Storage::View(slice, _) => slice.len(),
+    }
+  }
+
+  pub fn align(&self) -> usize {
+    match self {
+      Storage::Owned(alloc) => alloc.align(),
+      Storage::View(_, align) => *align,
     }
   }
 
@@ -47,13 +54,14 @@ impl<'a> Storage<'a> {
 
   pub fn view(&self) -> Storage<'a> {
     match self {
-      Storage::Owned(alloc) => {
-        Storage::View(unsafe { slice::from_raw_parts_mut(alloc.as_mut_ptr(), self.size()) })
-      }
-      // Storage::View(ptr, size) => Storage::View(ptr.clone(), *size),
-      Storage::View(slice) => {
-        Storage::View(unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), slice.len()) })
-      }
+      Storage::Owned(alloc) => Storage::View(
+        unsafe { slice::from_raw_parts_mut(alloc.as_mut_ptr(), self.size()) },
+        self.align(),
+      ),
+      Storage::View(slice, _) => Storage::View(
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), slice.len()) },
+        self.align(),
+      ),
     }
   }
 
@@ -62,6 +70,15 @@ impl<'a> Storage<'a> {
       Storage::Owned(_) => true,
       _ => false,
     }
+  }
+
+  pub fn to_owned(&self) -> Storage<'static> {
+    let s = Storage::new(self.size(), Some(self.align())).unwrap();
+    unsafe {
+      s.as_mut_ptr()
+        .copy_from_nonoverlapping(self.as_ptr(), self.size())
+    }
+    s
   }
 }
 
@@ -73,7 +90,7 @@ impl<'a, T> From<&'a [T]> for Storage<'a> {
         data.len() * mem::size_of::<T>() as usize,
       )
     };
-    Storage::View(data)
+    Storage::View(data, mem::align_of::<T>())
   }
 }
 
@@ -150,6 +167,20 @@ impl<'a> Tensor<'a> {
           other.numel * other.dtype.itemsize(),
         );
     }
+  }
+
+  pub fn to_owned(&self) -> Tensor<'static> {
+    let t = Tensor {
+      data: self.data.to_owned(),
+      ctx: self.ctx.clone(),
+      dtype: self.dtype.clone(),
+      numel: self.numel.clone(),
+      shape: self.shape.clone(),
+      strides: None,
+      byte_offset: 0,
+      dshape: self.dshape.clone(),
+    };
+    unsafe { mem::transmute::<Tensor<'a>, Tensor<'static>>(t) }
   }
 }
 
@@ -307,16 +338,14 @@ macro_rules! impl_tensor_from_ndarray {
       fn from(arr: ndarray::Array<$type, D>) -> Self {
         assert!(arr.is_standard_layout(), "Array must be contiguous.");
         let numel = arr.len() * mem::size_of::<$type>() as usize;
-        let storage = Storage::try_from(unsafe {
-          slice::from_raw_parts(arr.as_ptr() as *const u8, numel)
-        }).unwrap();
+        let storage =
+          Storage::from(unsafe { slice::from_raw_parts(arr.as_ptr() as *const u8, numel) });
         tensor_from_array_storage(&arr, storage, $typecode as usize)
       }
     }
     impl<'a, D: ndarray::Dimension> From<&'a ndarray::Array<$type, D>> for Tensor<'a> {
       fn from(arr: &'a ndarray::Array<$type, D>) -> Self {
         assert!(arr.is_standard_layout(), "Array must be contiguous.");
-        let numel = arr.len() * mem::size_of::<$type>() as usize;
         tensor_from_array_storage(
           arr,
           Storage::from(arr.as_slice().unwrap()),

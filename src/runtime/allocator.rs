@@ -31,6 +31,10 @@ impl Allocation {
   pub fn size(&self) -> usize {
     self.layout.size()
   }
+
+  pub fn align(&self) -> usize {
+    self.layout.align()
+  }
 }
 
 impl Drop for Allocation {

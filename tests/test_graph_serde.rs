@@ -7,29 +7,21 @@ extern crate tvm;
 
 use std::{collections::HashMap, convert::TryFrom, fs, io::Read};
 
-use tvm::{
-  errors::*,
-  runtime::{Graph, Tensor},
-};
+use tvm::runtime::Graph;
 
-fn load_graph() -> Result<Graph> {
-  Graph::try_from(
-    &fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/graph.json")).unwrap(),
-  )
-}
-
-fn load_params() -> Result<HashMap<String, Tensor>> {
+#[test]
+fn test_load_graph() {
   let mut params_bytes = Vec::new();
   fs::File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/graph.params"))
     .unwrap()
     .read_to_end(&mut params_bytes)
     .unwrap();
-  tvm::runtime::load_param_dict(&params_bytes)
-}
+  let params = tvm::runtime::load_param_dict(&params_bytes);
 
-#[test]
-fn test_load_graph() {
-  let graph = load_graph().unwrap();
+  let graph =
+    Graph::try_from(
+      &fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/graph.json")).unwrap(),
+    ).unwrap();
 
   assert_eq!(graph.nodes[3].op, "tvm_op");
   assert_eq!(
@@ -44,9 +36,4 @@ fn test_load_graph() {
   assert_eq!(graph.nodes[5].inputs[0].index, 0);
   assert_eq!(graph.nodes[6].inputs[0].index, 1);
   assert_eq!(graph.heads.len(), 2);
-}
-
-#[test]
-fn test_load_params() {
-  assert!(load_params().is_ok());
 }
