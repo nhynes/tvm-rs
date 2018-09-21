@@ -234,12 +234,15 @@ impl<'m, 't> GraphExecutor<'m, 't> {
 
     let mut op_execs = Vec::new();
     for (i, node) in graph.nodes.iter().enumerate() {
+        if node.op == "null" {
+          continue;
+        }
         ensure!(node.op == "tvm_op", "Only TVM ops are supported.");
         ensure!(node.attrs.is_some(), "Missing node attrs.");
 
         let attrs = node.parse_attrs()?;
 
-        if node.op == "null" || attrs.func_name == "__nop" {
+        if attrs.func_name == "__nop" {
           continue;
         }
 
