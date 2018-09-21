@@ -231,15 +231,21 @@ impl<'m, 't> GraphExecutor<'m, 't> {
   ) -> Result<Vec<Box<Fn() + 'm>>> {
     ensure!(graph.node_row_ptr.is_some(), "Missing node_row_ptr.");
     let node_row_ptr = graph.node_row_ptr.as_ref().unwrap();
-    graph
-      .nodes
-      .iter()
-      .enumerate()
-      .filter(|(_i, node)| node.op != "null")
-      .map(|(i, node)| {
+
+    let mut op_execs = Vec::new();
+    for (i, node) in graph.nodes.iter().enumerate() {
+        if node.op == "null" {
+          continue;
+        }
         ensure!(node.op == "tvm_op", "Only TVM ops are supported.");
-        ensure!(node.attrs.is_some(), "Missing node_row_ptr.");
+        ensure!(node.attrs.is_some(), "Missing node attrs.");
+
         let attrs = node.parse_attrs()?;
+
+        if attrs.func_name == "__nop" {
+          continue;
+        }
+
         let func = lib
           .get_function(&attrs.func_name)
           .ok_or(format!("Missing function {}", attrs.func_name))?;
@@ -267,9 +273,9 @@ impl<'m, 't> GraphExecutor<'m, 't> {
             .collect::<Vec<TVMArgValue>>();
           func(args.as_slice());
         };
-        Ok(op)
-      })
-      .collect()
+        op_execs.push(op);
+    }
+    Ok(op_execs)
   }
 
   pub fn load_params(&mut self, params: HashMap<String, Tensor<'t>>) {
