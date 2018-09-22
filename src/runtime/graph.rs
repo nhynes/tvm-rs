@@ -56,13 +56,11 @@ impl Graph {
         .as_ref()
         .ok_or(ErrorKind::GraphFormatError(
           "Missing graph attrs".to_string(),
-        ))?
-        .get(attr)
+        ))?.get(attr)
         .ok_or(ErrorKind::GraphFormatError(format!(
           "Missing {} attr",
           attr
-        )))?
-        .to_owned(),
+        )))?.to_owned(),
     )?)
   }
 }
@@ -101,8 +99,8 @@ impl Node {
       .ok_or(format!(
         "Node `{}` is missing attrs.flatten_data",
         self.name
-      ))?
-      .parse::<u8>()? == 1;
+      ))?.parse::<u8>()?
+      == 1;
     Ok(NodeAttrs {
       func_name,
       num_outputs,
@@ -189,8 +187,7 @@ impl<'m, 't> GraphExecutor<'m, 't> {
         } else {
           Err(ErrorKind::GraphFormatError(format!("Invalid dltype: {}", dltype).to_string()).into())
         }
-      })
-      .collect::<Result<Vec<DataType>>>()?;
+      }).collect::<Result<Vec<DataType>>>()?;
 
     let align = dtypes.iter().map(|dtype| dtype.bits as usize >> 3).max();
     let mut storage_num_bytes = vec![0usize; *storage_ids.iter().max().unwrap_or(&1) + 1];
@@ -217,8 +214,7 @@ impl<'m, 't> GraphExecutor<'m, 't> {
           strides: None,
           byte_offset: 0,
         }
-      })
-      .collect();
+      }).collect();
 
     Ok(tensors)
   }
@@ -234,46 +230,45 @@ impl<'m, 't> GraphExecutor<'m, 't> {
 
     let mut op_execs = Vec::new();
     for (i, node) in graph.nodes.iter().enumerate() {
-        if node.op == "null" {
-          continue;
-        }
-        ensure!(node.op == "tvm_op", "Only TVM ops are supported.");
-        ensure!(node.attrs.is_some(), "Missing node attrs.");
+      if node.op == "null" {
+        continue;
+      }
+      ensure!(node.op == "tvm_op", "Only TVM ops are supported.");
+      ensure!(node.attrs.is_some(), "Missing node attrs.");
 
-        let attrs = node.parse_attrs()?;
+      let attrs = node.parse_attrs()?;
 
-        if attrs.func_name == "__nop" {
-          continue;
-        }
+      if attrs.func_name == "__nop" {
+        continue;
+      }
 
-        let func = lib
-          .get_function(&attrs.func_name)
-          .ok_or(format!("Missing function {}", attrs.func_name))?;
-        let arg_indices = node
-          .inputs
-          .iter()
-          .map(|entry| graph.entry_index(entry))
-          .chain((0..attrs.num_outputs).map(|oi| Ok(node_row_ptr[i].clone() + oi)));
+      let func = lib
+        .get_function(&attrs.func_name)
+        .ok_or(format!("Missing function {}", attrs.func_name))?;
+      let arg_indices = node
+        .inputs
+        .iter()
+        .map(|entry| graph.entry_index(entry))
+        .chain((0..attrs.num_outputs).map(|oi| Ok(node_row_ptr[i].clone() + oi)));
 
-        let dl_tensors = arg_indices
-          .map(|idx| {
-            let tensor = &tensors[idx?];
-            Ok(if attrs.flatten_data {
-              DLTensor::from_tensor(tensor, true /* flatten */)
-            } else {
-              DLTensor::from(tensor)
-            })
+      let dl_tensors = arg_indices
+        .map(|idx| {
+          let tensor = &tensors[idx?];
+          Ok(if attrs.flatten_data {
+            DLTensor::from_tensor(tensor, true /* flatten */)
+          } else {
+            DLTensor::from(tensor)
           })
-          .collect::<Result<Vec<DLTensor>>>()
-          .unwrap();
-        let op: Box<Fn()> = box move || {
-          let args = dl_tensors
-            .iter()
-            .map(|t| t.into())
-            .collect::<Vec<TVMArgValue>>();
-          func(args.as_slice());
-        };
-        op_execs.push(op);
+        }).collect::<Result<Vec<DLTensor>>>()
+        .unwrap();
+      let op: Box<Fn()> = box move || {
+        let args = dl_tensors
+          .iter()
+          .map(|t| t.into())
+          .collect::<Vec<TVMArgValue>>();
+        func(args.as_slice());
+      };
+      op_execs.push(op);
     }
     Ok(op_execs)
   }
@@ -366,9 +361,9 @@ named!(
 /// Converts a bytes to String.
 named!(
   name<String>,
-  map_res!(length_bytes!(le_u64), |b: &[u8]| {
-    String::from_utf8(b.to_vec())
-  })
+  map_res!(length_bytes!(le_u64), |b: &[u8]| String::from_utf8(
+    b.to_vec()
+  ))
 );
 
 /// Parses a TVMContext
@@ -396,17 +391,23 @@ named!(
 named!(
   tensor<Tensor>,
   do_parse!(
-    take!(8) >> bits!(tag_bits!(u64, 64, 0)) >> ctx: tvm_ctx >> ndim: le_u32 >> dtype: data_type
-      >> shape: count!(map!(le_i64, |sz| sz as i64), ndim as usize) >> length: le_i64
-      >> data: take!(length) >> (Tensor {
-      data: Storage::from(data),
-      ctx: ctx,
-      dtype: dtype,
-      size: shape.iter().product::<i64>() as usize,
-      shape: shape,
-      strides: None,
-      byte_offset: 0,
-    })
+    take!(8)
+      >> bits!(tag_bits!(u64, 64, 0))
+      >> ctx: tvm_ctx
+      >> ndim: le_u32
+      >> dtype: data_type
+      >> shape: count!(map!(le_i64, |sz| sz as i64), ndim as usize)
+      >> length: le_i64
+      >> data: take!(length)
+      >> (Tensor {
+        data: Storage::from(data),
+        ctx: ctx,
+        dtype: dtype,
+        size: shape.iter().product::<i64>() as usize,
+        shape: shape,
+        strides: None,
+        byte_offset: 0,
+      })
   )
 );
 
@@ -414,7 +415,9 @@ named!(
 named!(
   parse_param_dict<HashMap<String, Tensor>>,
   do_parse!(
-    take!(8) >> bits!(tag_bits!(u64, 64, 0)) >> names: length_count!(le_u64, name)
+    take!(8)
+      >> bits!(tag_bits!(u64, 64, 0))
+      >> names: length_count!(le_u64, name)
       >> tensors: length_count!(le_u64, tensor)
       >> (HashMap::from_iter(names.into_iter().zip(tensors.into_iter())))
   )

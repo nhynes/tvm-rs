@@ -1,4 +1,10 @@
-#![feature(allocator_api, box_syntax, fn_traits, try_from, unboxed_closures)]
+#![feature(
+  allocator_api,
+  box_syntax,
+  fn_traits,
+  try_from,
+  unboxed_closures
+)]
 
 extern crate bounded_spsc_queue;
 #[macro_use]
@@ -18,7 +24,12 @@ extern crate serde_derive;
 extern crate serde_json;
 
 pub mod ffi {
-  #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals, unused)]
+  #![allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    unused
+  )]
 
   pub mod runtime {
     use std::os::raw::{c_char, c_int, c_void};

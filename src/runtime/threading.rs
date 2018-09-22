@@ -2,8 +2,7 @@ use std::{
   os::raw::{c_int, c_void},
   sync::{
     atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT},
-    Arc,
-    Barrier,
+    Arc, Barrier,
   },
 };
 
@@ -56,8 +55,7 @@ impl Job {
         },
         cdata: self.cdata,
         pending: Arc::clone(&self.pending),
-      })
-      .collect()
+      }).collect()
   }
 
   /// Waits for all tasks in this `Job` to be completed.
@@ -109,8 +107,7 @@ impl<'a> Threads {
         let (p, c) = bounded_spsc_queue::make(2);
         let handle = thread::spawn(move || cb(c.into()));
         (handle, p)
-      })
-      .unzip();
+      }).unzip();
     Threads {
       handles: handles,
       queues: queues,
@@ -125,8 +122,7 @@ impl<'a> Threads {
         let (p, c) = bounded_spsc_queue::make(2);
         consumer_queues.push_back(c.into());
         p
-      })
-      .collect();
+      }).collect();
     Threads { queues: queues }
   }
 }
