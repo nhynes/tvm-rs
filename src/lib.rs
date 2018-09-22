@@ -34,7 +34,10 @@ pub mod ffi {
   pub mod runtime {
     use std::os::raw::{c_char, c_int, c_void};
 
-    include!(concat!(env!("OUT_DIR"), "/c_runtime_api.rs"));
+    include!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/src/runtime/c_runtime_api.rs"
+    ));
 
     pub type BackendPackedCFunc =
       extern "C" fn(args: *const TVMValue, type_codes: *const c_int, num_args: c_int) -> c_int;

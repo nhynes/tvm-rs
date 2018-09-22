@@ -25,6 +25,3 @@ serde_json = "1.0.17"
 
 [target.'cfg(not(target_env = "sgx"))'.dependencies]
 num_cpus = "1.8.0"
-
-[build-dependencies]
-bindgen = "0.37"
