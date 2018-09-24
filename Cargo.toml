@@ -10,15 +10,17 @@ categories = ["api-bindings", "science"]
 authors = ["Nick Hynes <nhynes@berkeley.edu>"]
 
 [features]
+default = ["nom/std"]
+sgx = ["nom/alloc"]
 par-launch-alloc = []
 
 [dependencies]
 bounded-spsc-queue = "0.4.0"
 error-chain = { version = "0.12.0", default-features = false }
 itertools = "0.7.8"
-lazy_static = "1.0.0"
+lazy_static = "1.1.0"
 ndarray = "0.11.2"
-nom = "4.0.0"
+nom = {version = "4.0.0", default-features = false }
 serde = "1.0.59"
 serde_derive = "1.0.79"
 serde_json = "1.0.17"

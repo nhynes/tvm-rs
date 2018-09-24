@@ -1,4 +1,5 @@
 #![feature(
+  alloc,
   allocator_api,
   box_syntax,
   fn_traits,
@@ -6,7 +7,11 @@
   unboxed_closures
 )]
 
+#[cfg(target_env = "sgx")]
+extern crate alloc;
 extern crate bounded_spsc_queue;
+#[cfg(target_env = "sgx")]
+extern crate core;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]

@@ -7,7 +7,7 @@ use ffi::runtime::{
 
 use errors::*;
 
-pub type PackedFunc = Box<Fn(&[TVMArgValue]) -> TVMRetValue>;
+pub type PackedFunc = Box<Fn(&[TVMArgValue]) -> TVMRetValue + Send + Sync>;
 
 /// Calls a packed function and returns a `TVMRetValue`.
 ///
