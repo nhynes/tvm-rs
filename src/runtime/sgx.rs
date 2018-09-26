@@ -72,7 +72,6 @@ macro_rules! ocall_packed {
 impl Drop for SystemLibModule {
   fn drop(&mut self) {
     if env!("TVM_NUM_THREADS") != "0" {
-      println!("joining");
       sgx_join_threads()
     }
   }
