@@ -19,6 +19,9 @@ macro_rules! call_packed {
   ($fn:expr, $($args:expr),+) => {
     $fn(&[$($args.into(),)+])
   };
+  ($fn:expr) => {
+    $fn(&Vec::new())
+  };
 }
 
 /// A borrowed TVMPODValue. Can be constructed using `into()` but the preferred way

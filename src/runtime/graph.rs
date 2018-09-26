@@ -11,9 +11,9 @@ use ffi::runtime::{
 };
 
 // Magic number for NDArray file. @see `kTVMNDArrayMagic` in `ndarray.h`
-const NDARRAY_MAGIC: u64 = 0xDD5E40F096B4A13F;
+const _NDARRAY_MAGIC: u64 = 0xDD5E40F096B4A13F;
 // Magic number for NDArray list file. @see `kTVMNDArrayListMagic` in `graph_runtime.h`
-const NDARRAY_LIST_MAGIC: u64 = 0xF7E58D4F05049CB7;
+const _NDARRAY_LIST_MAGIC: u64 = 0xF7E58D4F05049CB7;
 
 /// A TVM computation graph.
 ///

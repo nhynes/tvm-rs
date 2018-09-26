@@ -33,7 +33,7 @@ error_chain! {
 }
 
 impl From<alloc::LayoutErr> for Error {
-  fn from(err: alloc::LayoutErr) -> Error {
+  fn from(_err: alloc::LayoutErr) -> Error {
     Error::from_kind(ErrorKind::Msg("Layout error".to_string()))
   }
 }

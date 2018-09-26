@@ -354,7 +354,7 @@ macro_rules! make_dtype_const {
 
 make_dtype_const!(DTYPE_INT32, DLDataTypeCode_kDLInt, 32, 1);
 make_dtype_const!(DTYPE_UINT32, DLDataTypeCode_kDLUInt, 32, 1);
-make_dtype_const!(DTYPE_FLOAT16, DLDataTypeCode_kDLFloat, 16, 1);
+// make_dtype_const!(DTYPE_FLOAT16, DLDataTypeCode_kDLFloat, 16, 1);
 make_dtype_const!(DTYPE_FLOAT32, DLDataTypeCode_kDLFloat, 32, 1);
 make_dtype_const!(DTYPE_FLOAT64, DLDataTypeCode_kDLFloat, 64, 1);
 
