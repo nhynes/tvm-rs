@@ -15,12 +15,15 @@ use std::{
 };
 
 #[cfg(target_env = "sgx")]
-use std::{collections::VecDeque, sync::Mutex};
+use std::{collections::VecDeque, ptr, sync::Mutex};
 
 use bounded_spsc_queue::{self, Producer};
 
 use super::super::errors::*;
 use ffi::runtime::TVMParallelGroupEnv;
+
+#[cfg(target_env = "sgx")]
+use super::{TVMArgValue, TVMRetValue};
 
 type FTVMParallelLambda =
   extern "C" fn(task_id: usize, penv: *const TVMParallelGroupEnv, cdata: *const c_void) -> i32;
@@ -115,14 +118,18 @@ impl<'a> Threads {
   }
 
   #[cfg(target_env = "sgx")]
-  fn launch<F: Sync + Send + FnOnce(Consumer<Task>) + 'static + Copy>(num: usize, _cb: F) -> Self {
+  fn launch<F: Sync + Send + FnOnce(Consumer<Task>) + 'static + Copy>(
+    num_threads: usize,
+    _cb: F,
+  ) -> Self {
     let mut consumer_queues = SGX_QUEUES.lock().unwrap();
-    let queues = (0..num)
+    let queues = (0..num_threads)
       .map(|_| {
         let (p, c) = bounded_spsc_queue::make(2);
         consumer_queues.push_back(c.into());
         p
       }).collect();
+    ocall_packed!("__sgx_thread_group_launch__", num_threads as u64);
     Threads { queues: queues }
   }
 }
@@ -212,11 +219,16 @@ fn max_concurrency() -> usize {
 }
 
 #[cfg(target_env = "sgx")]
-#[no_mangle]
-pub extern "C" fn tvm_ecall_run_worker() {
-  if let Some(q) = SGX_QUEUES.lock().unwrap().pop_front() {
+pub fn tvm_run_worker(_args: &[TVMArgValue]) -> TVMRetValue {
+  let q = {
+    let mut qs = SGX_QUEUES.lock().unwrap();
+    qs.pop_front()
+    // `qs: MutexGuard` needs to be dropped here since `run_worker` won't return
+  };
+  if let Some(q) = q {
     ThreadPool::run_worker(q);
   }
+  TVMRetValue::default()
 }
 
 #[no_mangle]
@@ -242,6 +254,27 @@ pub extern "C" fn TVMBackendParallelLaunch(
     });
   }
   return 0;
+}
+
+#[cfg(target_env = "sgx")]
+pub(crate) fn sgx_join_threads() -> () {
+  extern "C" fn poison_pill(
+    _task_id: usize,
+    _penv: *const TVMParallelGroupEnv,
+    _cdata: *const c_void,
+  ) -> i32 {
+    <i32>::min_value()
+  }
+
+  THREAD_POOL.with(|pool| {
+    pool.launch(Job {
+      cb: poison_pill,
+      cdata: ptr::null(),
+      req_num_tasks: 0,
+      pending: Arc::new(ATOMIC_USIZE_INIT),
+    });
+  });
+  ocall_packed!("__sgx_thread_group_join__", 0);
 }
 
 // @see https://github.com/dmlc/tvm/issues/988 for information on why this function is used.
