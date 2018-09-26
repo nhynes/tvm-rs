@@ -2,9 +2,11 @@
   alloc,
   allocator_api,
   box_syntax,
+  extern_prelude,
   fn_traits,
   try_from,
-  unboxed_closures
+  unboxed_closures,
+  vec_remove_item
 )]
 
 #[cfg(target_env = "sgx")]

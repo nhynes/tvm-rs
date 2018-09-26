@@ -145,21 +145,23 @@ impl ThreadPool {
   }
 
   fn launch(&self, job: Job) {
-    let tasks = job.tasks(self.num_workers);
+    let mut tasks = job.tasks(self.num_workers + 1);
 
-    let _: Vec<()> = tasks
-      .into_iter()
-      .zip(self.threads.queues.iter())
-      .map(|(task, q)| q.push(task))
-      .collect();
+    for (i, task) in tasks.split_off(1).into_iter().enumerate() {
+      self.threads.queues[i].push(task);
+    }
 
+    tasks.pop().unwrap()();
     job.wait().unwrap();
   }
 
   fn run_worker(queue: Consumer<Task>) {
     loop {
       let task = queue.pop();
-      if task() != 0 {
+      let result = task();
+      if result == <i32>::min_value() {
+        break;
+      } else if result != 0 {
         panic!("Error running task.");
       }
     }
@@ -229,9 +231,6 @@ pub extern "C" fn TVMBackendParallelLaunch(
       num_task: 1,
     };
     cb(0, &penv as *const _, cdata);
-
-    #[cfg(feature = "par-launch-alloc")]
-    let break_the_heap: Vec<u8> = Vec::new(); // TODO: why does allocating break?
   } else {
     THREAD_POOL.with(|pool| {
       pool.launch(Job {

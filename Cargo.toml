@@ -12,7 +12,6 @@ authors = ["Nick Hynes <nhynes@berkeley.edu>"]
 [features]
 default = ["nom/std"]
 sgx = ["nom/alloc"]
-par-launch-alloc = []
 
 [dependencies]
 bounded-spsc-queue = "0.4.0"
