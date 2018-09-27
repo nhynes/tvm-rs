@@ -1,6 +1,7 @@
 use std::{
   cell::RefCell,
   os::raw::{c_int, c_void},
+  ptr,
 };
 
 use super::allocator::Allocation;
@@ -98,7 +99,7 @@ pub extern "C" fn TVMBackendAllocWorkspace(
     pool_cell
       .borrow_mut()
       .alloc(nbytes as usize, dtype_bits_hint as usize)
-      .unwrap() as *mut c_void
+      .unwrap_or(ptr::null_mut()) as *mut c_void
   })
 }
 
