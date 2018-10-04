@@ -7,6 +7,8 @@ use std::{
 use super::allocator::Allocation;
 use errors::*;
 
+const WS_ALIGN: usize = 64; // taken from `kTempAllocaAlignment` in `device_api.h`
+
 struct WorkspacePool {
   workspaces: Vec<Allocation>,
   free: Vec<usize>,
@@ -22,23 +24,22 @@ impl WorkspacePool {
     }
   }
 
-  fn alloc_new(&mut self, size: usize, align: usize) -> Result<*mut u8> {
-    self.workspaces.push(Allocation::new(size, Some(align))?);
+  fn alloc_new(&mut self, size: usize) -> Result<*mut u8> {
+    self.workspaces.push(Allocation::new(size, Some(WS_ALIGN))?);
     self.in_use.push(self.workspaces.len() - 1);
     Ok(self.workspaces[self.workspaces.len() - 1].as_mut_ptr())
   }
 
-  fn alloc(&mut self, size: usize, align: usize) -> Result<*mut u8> {
+  fn alloc(&mut self, size: usize) -> Result<*mut u8> {
     if self.free.len() == 0 {
-      return self.alloc_new(size, align);
+      return self.alloc_new(size);
     }
     let idx = self
       .free
       .iter()
       .fold(None, |cur_ws_idx: Option<usize>, &idx| {
         let ws_size = self.workspaces[idx].size();
-        let ws_ok = ws_size >= size && self.workspaces[idx].align() == align;
-        if !ws_ok {
+        if !ws_size >= size {
           return cur_ws_idx;
         }
         cur_ws_idx.and_then(|cur_idx| {
@@ -56,7 +57,7 @@ impl WorkspacePool {
         self.in_use.push(idx);
         Ok(self.workspaces[idx].as_mut_ptr())
       }
-      None => self.alloc_new(size, align),
+      None => self.alloc_new(size),
     }
   }
 
@@ -88,7 +89,7 @@ pub extern "C" fn TVMBackendAllocWorkspace(
   _device_id: c_int,
   size: u64,
   _dtype_code_hint: c_int,
-  dtype_bits_hint: c_int,
+  _dtype_bits_hint: c_int,
 ) -> *mut c_void {
   let nbytes = if size == 0 {
     WORKSPACE_PAGE_SIZE
@@ -98,7 +99,7 @@ pub extern "C" fn TVMBackendAllocWorkspace(
   WORKSPACE_POOL.with(|pool_cell| {
     pool_cell
       .borrow_mut()
-      .alloc(nbytes as usize, dtype_bits_hint as usize)
+      .alloc(nbytes as usize)
       .unwrap_or(ptr::null_mut()) as *mut c_void
   })
 }
