@@ -131,7 +131,7 @@ impl<'a> TryFrom<&'a str> for Graph {
 ///
 /// ```
 /// use ndarray::Array;
-
+///
 /// let syslib = SystemLibModule::default(); // a provider of TVM functions
 ///
 /// let mut params_bytes = Vec::new();
@@ -142,7 +142,7 @@ impl<'a> TryFrom<&'a str> for Graph {
 ///
 /// let mut exec = GraphExecutor::new(graph, &syslib).unwrap();
 /// exec.load_params(params);
-
+///
 /// let x = Array::from_vec(vec![1f32, 2., 3., 4.]);
 /// exec.set_input("data", x.into());
 /// exec.run();
