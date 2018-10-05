@@ -156,6 +156,8 @@ pub struct GraphExecutor<'m, 't> {
   tensors: Vec<Tensor<'t>>,
 }
 
+unsafe impl<'m, 't> Send for GraphExecutor<'m, 't> {}
+
 impl<'m, 't> GraphExecutor<'m, 't> {
   pub fn new<M: 'm + Module>(graph: Graph, lib: &'m M) -> Result<Self> {
     let tensors = Self::setup_storages(&graph)?;
